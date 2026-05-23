@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-05-24
+
+### Added
+- App icon: aperture-wheel concept with a cyan-glow play triangle at
+  the iris center, brushed-metal outer ring, on a black background.
+  Generated mipmap variants at mdpi 48, hdpi 72, xhdpi 96, xxhdpi 144,
+  xxxhdpi 192 from a 1254×1254 source. Wired `android:icon` and
+  `android:roundIcon` in the manifest.
+
 ## [0.1.3] - 2026-05-24
 
 ### Fixed
