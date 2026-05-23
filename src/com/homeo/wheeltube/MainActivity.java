@@ -67,6 +67,18 @@ public class MainActivity extends Activity {
             "/youtubei/v1/player/ad_break");
 
     /**
+     * Query-string markers that, when seen on any URL, mean the request
+     * is delivering an ad video chunk rather than real content.
+     */
+    private static final List<String> BLOCKED_QUERY_MARKERS = Arrays.asList(
+            "&oad=",
+            "&adformat=",
+            "&adunit=",
+            "&ad_type=",
+            "&ctier=L",
+            "&ctier=l");
+
+    /**
      * The JS user script, injected on every page event. Idempotent —
      * subsequent injections are no-ops. Lives in window scope so SPA
      * navigations don't lose it.
@@ -75,6 +87,7 @@ public class MainActivity extends Activity {
         "(function(){" +
         "  if (window.__wt_installed) return;" +
         "  window.__wt_installed = true;" +
+        "  console.log('[WheelTube] ad-killer installed');" +
         // ---- 1. Static CSS hiding ----
         "  var s = document.createElement('style');" +
         "  s.id = 'wheeltube-style';" +
@@ -90,6 +103,8 @@ public class MainActivity extends Activity {
         "     ytm-action-companion-ad-renderer," +
         "     ytm-display-ad-renderer," +
         "     ytm-mobile-action-companion-ad-renderer," +
+        "     ytm-search-promotion-renderer," +
+        "     ytm-rich-shelf-renderer[is-search-shelf]," +
         "     ytd-ad-slot-renderer," +
         "     ytd-promoted-sparkles-web-renderer," +
         "     ytd-promoted-sparkles-text-search-renderer," +
@@ -99,54 +114,93 @@ public class MainActivity extends Activity {
         "     ytd-promoted-video-renderer," +
         "     ytd-statement-banner-renderer," +
         "     ytd-action-companion-ad-renderer," +
+        "     ytd-in-feed-ad-layout-renderer," +
+        "     ytd-engagement-panel-section-list-renderer[target-id=\"engagement-panel-ads\"]," +
         "     .video-ads," +
         "     .ytp-ad-module," +
         "     .ytp-ad-overlay-container," +
         "     .ytp-ad-overlay-image," +
         "     .ytp-ad-image-overlay," +
         "     .ytp-ad-text-overlay," +
+        "     .ytp-featured-product," +
         "     .ad-container," +
         "     #player-ads," +
         "     #masthead-ad," +
-        "     ytd-promoted-sparkles-text-search-renderer { display: none !important; }';" +
+        "     [class*=\"ytp-ad-\"]," +
+        "     [class*=\"ytm-promoted\"]," +
+        "     [aria-label=\"Sponsored\"]," +
+        "     [aria-label=\"Promoted\"] { display: none !important; }';" +
         "  (document.head || document.documentElement).appendChild(s);" +
-        // ---- 2. In-video ad killer ----
+        // ---- 2. In-video ad killer (with shadow-DOM piercing) ----
+        "  function allVideos(){" +
+        "    var out = [];" +
+        "    function walk(root){" +
+        "      try {" +
+        "        var vs = root.querySelectorAll && root.querySelectorAll('video');" +
+        "        if (vs) for (var i=0;i<vs.length;i++) out.push(vs[i]);" +
+        "        var els = root.querySelectorAll && root.querySelectorAll('*');" +
+        "        if (els) for (var j=0;j<els.length;j++){" +
+        "          if (els[j].shadowRoot) walk(els[j].shadowRoot);" +
+        "        }" +
+        "      } catch(e){}" +
+        "    }" +
+        "    walk(document);" +
+        "    return out;" +
+        "  }" +
+        "  function isAdShowing(){" +
+        "    return !!(" +
+        "      document.querySelector('.ad-showing') ||" +
+        "      document.querySelector('[class*=\"ad-showing\"]') ||" +
+        "      document.querySelector('[class*=\"ad-interrupting\"]') ||" +
+        "      document.querySelector('.ytp-ad-player-overlay') ||" +
+        "      document.querySelector('.ytp-ad-text') ||" +
+        "      document.querySelector('.ytp-ad-skip-button-container') ||" +
+        "      document.querySelector('.ytp-ad-overlay-container') ||" +
+        "      document.querySelector('.video-ads')" +
+        "    );" +
+        "  }" +
+        "  var lastState = false;" +
         "  function killAds(){" +
         "    try {" +
-        // Mobile/desktop: fast-forward any ad video element
-        "      var vids = document.querySelectorAll('video');" +
-        "      for (var i=0;i<vids.length;i++){" +
-        "        var v = vids[i];" +
-        "        var pl = v.closest('.html5-video-player') || v.closest('.video-stream');" +
-        "        var adShowing = (pl && pl.classList && pl.classList.contains('ad-showing'))" +
-        "                     || document.querySelector('.ytp-ad-player-overlay')" +
-        "                     || document.querySelector('.ytp-ad-skip-button-container')" +
-        "                     || document.querySelector('.ytp-ad-text');" +
-        "        if (adShowing && !isNaN(v.duration) && v.duration > 0) {" +
-        "          v.currentTime = v.duration;" +
-        "          v.playbackRate = 16;" +
-        "          v.muted = true;" +
+        "      var ad = isAdShowing();" +
+        "      if (ad !== lastState) {" +
+        "        console.log('[WheelTube] ad state:', ad);" +
+        "        lastState = ad;" +
+        "      }" +
+        "      if (ad) {" +
+        "        var vids = allVideos();" +
+        "        for (var i=0;i<vids.length;i++){" +
+        "          var v = vids[i];" +
+        "          if (!isNaN(v.duration) && v.duration > 0) {" +
+        "            v.currentTime = Math.max(v.duration - 0.05, 0);" +
+        "            v.playbackRate = 16;" +
+        "            v.muted = true;" +
+        "          } else {" +
+        "            try { v.playbackRate = 16; v.muted = true; } catch(e){}" +
+        "          }" +
+        "        }" +
+        "        var skips = document.querySelectorAll(" +
+        "          '.ytp-ad-skip-button," +
+        "           .ytp-ad-skip-button-modern," +
+        "           .ytp-skip-ad-button," +
+        "           .ytm-skip-ad-button," +
+        "           .ytp-ad-survey-answer-button," +
+        "           button.ytp-ad-skip-button-modern," +
+        "           button[class*=\"skip-ad-button\"]');" +
+        "        for (var j=0;j<skips.length;j++){" +
+        "          try { skips[j].click(); } catch(e){}" +
+        "        }" +
+        "        var closes = document.querySelectorAll(" +
+        "          '.ytp-ad-overlay-close-button," +
+        "           .ytp-ad-overlay-close-container," +
+        "           [aria-label=\"Close ad\"]');" +
+        "        for (var k=0;k<closes.length;k++){" +
+        "          try { closes[k].click(); } catch(e){}" +
         "        }" +
         "      }" +
-        // Skip buttons (desktop + mobile variants)
-        "      var skips = document.querySelectorAll(" +
-        "        '.ytp-ad-skip-button," +
-        "         .ytp-ad-skip-button-modern," +
-        "         .ytp-skip-ad-button," +
-        "         .ytm-skip-ad-button," +
-        "         .ytp-ad-survey-answer-button," +
-        "         button.ytp-ad-skip-button-modern');" +
-        "      for (var j=0;j<skips.length;j++){" +
-        "        try { skips[j].click(); } catch(e){}" +
-        "      }" +
-        // Hide overlay banners that slip through
-        "      var overlays = document.querySelectorAll(" +
-        "        '.ytp-ad-overlay-close-button," +
-        "         .ytp-ad-overlay-close-container');" +
-        "      for (var k=0;k<overlays.length;k++){ try { overlays[k].click(); } catch(e){} }" +
-        "    } catch(e){}" +
+        "    } catch(e){ console.log('[WheelTube] killAds err:', e); }" +
         "  }" +
-        "  setInterval(killAds, 250);" +
+        "  setInterval(killAds, 200);" +
         "  killAds();" +
         // ---- 3. Mutation observer keeps style alive across SPA reloads ----
         "  try {" +
@@ -247,6 +301,7 @@ public class MainActivity extends Activity {
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
             if (req == null || req.getUrl() == null) return null;
+            String url = req.getUrl().toString();
             String host = req.getUrl().getHost();
             String path = req.getUrl().getPath();
 
@@ -260,6 +315,11 @@ public class MainActivity extends Activity {
                 for (String p : BLOCKED_PATHS) {
                     if (path.contains(p)) return EMPTY;
                 }
+            }
+            // Block ad video chunks (same googlevideo.com host as content)
+            // by inspecting URL params known to mark ad delivery.
+            for (String marker : BLOCKED_QUERY_MARKERS) {
+                if (url.contains(marker)) return EMPTY;
             }
             return null;
         }

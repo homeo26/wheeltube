@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-05-24
+
+### Changed
+- **Shadow-DOM piercing.** Mobile YouTube renders its `<video>` inside a
+  shadow root, which `document.querySelectorAll('video')` doesn't see.
+  v0.1.2 walks all shadow roots recursively when finding video elements
+  to fast-forward, so in-video ads get killed even on the mobile player.
+- **More ad-detection signals.** Added `[class*="ad-showing"]`,
+  `[class*="ad-interrupting"]`, `.ytp-ad-overlay-container`, and
+  `.video-ads` so we catch ads in different player states.
+- **More skip-button selectors:** `button[class*="skip-ad-button"]` plus
+  the existing variants.
+- **Network-layer URL-marker blocking.** Drop requests whose URL
+  contains `&oad=`, `&adformat=`, `&adunit=`, `&ad_type=`, or
+  `&ctier=L` — these mark ad video chunks served from `googlevideo.com`,
+  the same host as real content.
+- **Faster polling** (250ms → 200ms) so ad video frames flash for less
+  than a quarter second before being seeked away.
+- **Console diagnostics:** `[WheelTube] ad-killer installed`,
+  `[WheelTube] ad state: true/false` log lines so the script is
+  debuggable via `chrome://inspect`.
+- **Expanded CSS:** generic `[class*="ytp-ad-"]` and
+  `[aria-label="Sponsored"|"Promoted"]` selectors plus
+  `ytd-in-feed-ad-layout-renderer`, `ytm-search-promotion-renderer`,
+  and feature-product overlays.
+
 ## [0.1.1] - 2026-05-24
 
 ### Changed
