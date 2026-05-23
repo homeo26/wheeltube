@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WheelTube</string>
+    <string name="open_in_wheeltube">Open WheelTube</string>
+    <string name="open_in_wheeltube_subtitle">Tap to open YouTube on your screen</string>
+</resources>
